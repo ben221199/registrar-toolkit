@@ -3,16 +3,16 @@
 # rrps: A Simple NSI Registry Registrar protocol server stub.
 #
 # File name: certinfo 
-# Author: Scott Hollenbeck <shollenb@netsol.com>
+# Author: Scott Hollenbeck <shollenb@verisign.com>
 # 
-# Copyright © 1998-2000, Network Solutions, Inc., All Rights Reserved
-# 505 Huntmar Park Dr.
-# Herndon, VA 20170
-# USA
+# Copyright © 1998-2000, VeriSign, Inc., All Rights Reserved
+# VeriSign Global Registry Service
+# 21345 Ridgetop Circle
+# Dulles, VA 20166
 # 
 # The software contained in this file is free software; you can redistribute
 # it and/or modify it under the terms of the NSI General Public License
-# (version 1.0 or later) as published by Network Solutions, Inc.
+# (version 1.0 or later) as published by VeriSign, Inc.
 
 # This software is distributed in the hope that it will be useful, but WITHOUT
 # ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or

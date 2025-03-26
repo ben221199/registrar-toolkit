@@ -1,12 +1,12 @@
-NSI Registry
-Copyright (c) 1999 Network Solutions, Inc. All rights reserved.
+VeriSign Global Registry Service
+Copyright (c) 1999 VeriSign, Inc. All rights reserved.
 
-Network Solutions, Inc.
-505 Huntmar Park Dr.
-Herndon, VA 20170
+VeriSign Global Registry Service
+21345 Ridgetop Circle
+Dulles, VA 20166
 USA
 +1 703 925 6999
-mailto:info@NSIRegistry.net
+mailto:info@verisign-grs.com
 
 TABLE OF CONTENTS
 1. Introduction
@@ -52,7 +52,13 @@ its use.
 
 ipv4.cfg
 --------
-This configuration file identifies IP address block ranges reserved by
+This configuration file identifies IPv4 address block ranges reserved by
+IANA.  IP addresses that fall within these ranges are NOT available
+for general use, and they should thus NOT be used for name servers.
+
+ipv6.cfg
+--------
+This configuration file identifies IPv6 address block ranges reserved by
 IANA.  IP addresses that fall within these ranges are NOT available
 for general use, and they should thus NOT be used for name servers.
 

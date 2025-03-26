@@ -1,5 +1,5 @@
 rem ############################################################################
-rem # Copyright (C) 2000 Network Solutions, Inc.
+rem # Copyright (C) 2000 VeriSign, Inc.
 rem #
 rem # This library is free software; you can redistribute it and/or
 rem # modify it under the terms of the GNU Lesser General Public
@@ -15,9 +15,9 @@ rem # You should have received a copy of the GNU Lesser General Public
 rem # License along with this library; if not, write to the Free Software
 rem # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 rem #
-rem # Network Solutions, Inc. Registry
-rem # 505 Huntmar Park Dr.
-rem # Herndon, VA 20170
+rem # VeriSign Global Registry Service
+rem # 21345 Ridgetop Circle
+rem # Dulles, VA 20166
 rem ############################################################################
 rem # The RRP, APIs and Software are provided "as-is" and without any warranty #
 rem # of any kind.  NSI EXPRESSLY DISCLAIMS ALL WARRANTIES AND/OR CONDITIONS,  #

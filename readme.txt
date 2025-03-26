@@ -1,12 +1,12 @@
-NSI Registry
+VeriSign Global Registry Service
 Copyright (c) 1999 Network Solutions, Inc. All rights reserved.
 
-Network Solutions, Inc.
-505 Huntmar Park Dr.
-Herndon, VA 20170
+VeriSign Global Registry Service
+21345 Ridgetop Circle
+Dulles, VA 20166
 USA
 +1 703 925 6999
-mailto:info@NSIRegistry.net
+mailto:info@verisign-grs.com
 
 TABLE OF CONTENTS
 1. Introduction

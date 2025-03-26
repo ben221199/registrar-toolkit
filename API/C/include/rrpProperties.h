@@ -1,5 +1,5 @@
 /* ===========================================================================
- * Copyright (C) 2000 Network Solutions, Inc.
+ * Copyright (C) 2000 VeriSign, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -15,9 +15,9 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
- * Network Solutions, Inc. Registry
- * 505 Huntmar Park Dr.
- * Herndon, VA 20170
+ * VeriSign Global Registry Service
+ * 21345 Ridgetop Circle
+ * Dulles, VA 20166
  * ===========================================================================
  * The RRP, APIs and Software are provided "as-is" and without any warranty
  * of any kind.  NSI EXPRESSLY DISCLAIMS ALL WARRANTIES AND/OR CONDITIONS,

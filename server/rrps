@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 # ===========================================================================
-# Copyright (C) 2000 Network Solutions, Inc.
+# Copyright (C) 2000 VeriSign, Inc
 # 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -16,9 +16,9 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 # 
-# Network Solutions, Inc. Registry
-# 505 Huntmar Park Dr.
-# Herndon, VA 20170
+# VeriSign Global Registry Service
+# 21345 Ridgetop Circle
+# Dulles, VA 20166
 # =========================================================================
 # The RRP, APIs and Software are provided "as-is" and without any warranty
 # of any kind.  NSI EXPRESSLY DISCLAIMS ALL WARRANTIES AND/OR CONDITIONS,
@@ -51,16 +51,18 @@ use Socket;
 
 # Define basic default values and other globals.
 $ban_date = "";
-$banner = "NSI RRP Server version";
+$banner = "VeriSign RRP Server version";
 $children = 0;
 $cfg_file = "rrps.cfg";
 %cfg = ();
 $crlf = "\r\n";
 $default_port = 648;
 @ipv4 = ();
+@ipv6 = ();
 $ipv4_cfg_file = "ipv4.cfg";
+$ipv6_cfg_file = "ipv6.cfg";
 $mtime = 0;
-$rrp_version = "1.1.0";
+$rrp_version = "2.0.0";
 
 # =========================================================================
 #
@@ -161,6 +163,31 @@ while (<CONFIG>) {
 
   # Add the min and max values to the table.
   push @ipv4, [$new_minIP, $new_maxIP];
+}
+close(CONFIG);
+
+# Now process the IPv6 restricted address configuration file.
+open(CONFIG, "< $ipv6_cfg_file")
+  or die "RRPS: Couldn't open configuration file $ipv6_cfg_file: $!.\n";
+  
+while (<CONFIG>) {
+  chomp;              # Remove newline.
+  s/#.*//;            # Remove comments.
+  s/^\s+//;           # Remove leading white space.
+  s/\s+$//;           # Remove trailing white space.
+  next unless length; # get the next line if there's nothing left.
+  my ($minIP, $maxIP) = split(/\s*-\s*/, $_, 2);
+
+  # Convert each address to number format.
+  if (($new_minIP = ipv6_tonum($minIP)) == -1) {
+    die "RRPS (Fatal Error): Invalid IPv6 address $minIP.\n";
+  }
+  if (($new_maxIP = ipv6_tonum($maxIP)) == -1) {
+    die "RRPS (Fatal Error): Invalid IPv6 address $maxIP.\n";
+  }
+
+  # Add the min and max values to the table.
+  push @ipv6, [$new_minIP, $new_maxIP];
 }
 close(CONFIG);
 

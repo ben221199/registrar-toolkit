@@ -1,5 +1,5 @@
 # ===========================================================================
-# Copyright (C) 2000 Network Solutions, Inc.
+# Copyright (C) 2000 VeriSign, Inc.
 # 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -15,9 +15,9 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 # 
-# Network Solutions, Inc. Registry
-# 505 Huntmar Park Dr.
-# Herndon, VA 20170
+# VeriSign Global Registry Service
+# 21345 Ridgetop Circle
+# Dulles, VA 20166
 # =========================================================================
 # The RRP, APIs and Software are provided "as-is" and without any warranty
 # of any kind.  NSI EXPRESSLY DISCLAIMS ALL WARRANTIES AND/OR CONDITIONS,
@@ -48,6 +48,7 @@
 # =========================================================================
 package RRPCache;
 use IO::File;
+use POSIX ();
 use strict;
 use Socket;
 
@@ -85,10 +86,15 @@ sub cache_init {
   ($cfg) = @_;
 
   # OK, now we are going to create a socket for use by all
-  # forked children. Each child will lock the CACHEOUT socket using flock
-  # before performing an operation.
+  # forked children. Each child will lock the CACHEOUT when it needs to use
+  # the CACHEOUT socket using flock() before performing an operation.
   socketpair(CACHEOUT, CACHEIN, AF_UNIX, SOCK_STREAM, 0)
    or die "RRPS (Fatal Error): Unable to create socket for cache lock!";
+
+  # open the lock file.
+  my $lockfile = POSIX::tmpnam();
+  open(LOCK_FH, "> $lockfile")
+   or die "RRPS (Fatal Error): Unable to create lockfile: $!";
 }
 
 # =========================================================================
@@ -134,8 +140,7 @@ sub increment_session_count {
   my $inbuf;
 
   # lock the socket
-  flock CACHEOUT, 2 
-    or die "RRPS (Fatal Error): Unable to obtain lock on cache socket!";
+  lock_cache();
 
   # Check the session count here; we have lock so it is ok to touch
   # variable
@@ -160,8 +165,7 @@ sub increment_session_count {
   }
   
   # unlock socket 
-  flock CACHEOUT, 8 
-    or die "RRPS (Fatal Error): Unable to release lock on cache socket!";
+  unlock_cache();
 
   return $retc;
 }
@@ -176,8 +180,7 @@ sub decrement_session_count {
   my $inbuf;
 
   # lock the socket
-  flock CACHEOUT, 2
-    or die "RRPS (Fatal Error): Unable to obtain lock on cache socket!";
+  lock_cache();
 
   print CACHEOUT "decrement session_count\n";
 
@@ -190,8 +193,15 @@ sub decrement_session_count {
   }
 
   # unlock socket
-  flock CACHEOUT, 8
-    or die "RRPS (Fatal Error): Unable to release lock on cache socket!";
+  unlock_cache();
+}
+
+sub lock_cache {
+  flock LOCK_FH, 2 or die "RRPS (Fatal Error): Unable to lock: $!";
+}
+
+sub unlock_cache {
+  flock LOCK_FH, 8 or die "RRPS (Fatal Error): Failed to release lock: $!";
 }
 
 # Last line.

@@ -1,5 +1,5 @@
 # ===========================================================================
-# Copyright (C) 2000 Network Solutions, Inc.
+# Copyright (C) 2000 VeriSign, Inc.
 # 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -15,9 +15,9 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 # 
-# Network Solutions, Inc. Registry
-# 505 Huntmar Park Dr.
-# Herndon, VA 20170
+# VeriSign Global Registry Service
+# 21345 Ridgetop Circle
+# Dulles, VA 20166
 # =========================================================================
 # The RRP, APIs and Software are provided "as-is" and without any warranty
 # of any kind.  NSI EXPRESSLY DISCLAIMS ALL WARRANTIES AND/OR CONDITIONS,
@@ -71,6 +71,7 @@ $VERSION = 1.10;
 # Private global variables.
 my $crlf = "\r\n";
 my @ipv4_table = ();
+my @ipv6_table = ();
 my $session_established = 0;
 my $session_try_count = 0;
 my $version = "1.1.0";
@@ -91,6 +92,7 @@ my $attr_status4 = "status:REGISTRAR-HOLD";
 my $attr_status5 = "status:REGISTRAR-LOCK";
 my $attr_status6 = "status:REGISTRY-DELETE-NOTIFY";
 my $attr_transfer_date = "registrar transfer date:";
+my $is_cctldns = 0;
 
 # Create a hash table for RRP command processing procedures.
 # Note the lower case keys.
@@ -300,6 +302,9 @@ sub process_command {
   # Note the IPv4 address table.
   @ipv4_table = \@main::ipv4;
 
+  # Note the IPv6 address table.
+  @ipv6_table = \@main::ipv6;
+
   if ($rrp_commands{$command}) {
     ($stay_open, $response) =
         $rrp_commands{$command}->(\@lines, $cfg);
@@ -394,7 +399,6 @@ sub add_command {
       if ($seen{"domainname"}) {
         $response_key = "503";
       }
-
       # Check address count.
       elsif ($seen{"ipaddress"}) {
         # Was the maximum exceeded?
@@ -404,7 +408,14 @@ sub add_command {
         # Was the minimum met?  The min may be zero, but this check is 
         # here to keep the logic complete.
         elsif ($seen{"ipaddress"} < $min_add_addresses) {
-          $response_key = "504";
+          if($is_cctldns == 0) {
+            $response_key = "504";
+          }
+        }
+        elsif ($seen{"ipaddress"} >= $min_add_addresses) {
+          if($is_cctldns == 1) {
+            $response_key = "503";
+          }
         }
 
         # Check for inputs to cause forced error conditions.
@@ -420,7 +431,9 @@ sub add_command {
       }
       else {
         # No IP addresses specified.  At least one is required.
-        $response_key = "504";
+          if($is_cctldns == 0) {
+            $response_key = "504";
+          }
       }
     }
   }
@@ -736,7 +749,6 @@ sub mod_command {
       if ($seen{"domainname"}) {
         $response_key = "503";
       }
-
       # Check address count.
       elsif ($seen{"ipaddress"}) {
         # Was the maximum exceeded?
@@ -746,7 +758,14 @@ sub mod_command {
         # Was the minimum met?  The min may be zero, but this check is here to
         # keep the logic complete.
         elsif ($seen{"ipaddress"} < $min_add_addresses) {
-          $response_key = "504";
+          if($is_cctldns == 0) {
+            $response_key = "504";
+          }
+        }
+        elsif ($seen{"ipaddress"} >= $min_add_addresses) {
+          if($is_cctldns == 1) {
+            $response_key = "503";
+          }
         }
 
         # Check for inputs to cause forced error conditions.
@@ -768,7 +787,9 @@ sub mod_command {
       }
       else {
         # No IP addresses specified.  At least one is required.
-        $response_key = "504";
+          if($is_cctldns == 0) {
+            $response_key = "504";
+          }
       }
     }
   }
@@ -1448,7 +1469,8 @@ sub validate_ipv4address {
 
   # Check this address for syntax correctness and convert to 64-bit format.
   if (($packed_ip = inet_to64($ipv4address)) < 0) {
-    $response_key = "541";
+    $packed_ip = validate_ipv6address($ipv4address);
+    $response_key = $packed_ip;
     return $response_key;
   }
 
@@ -1463,6 +1485,47 @@ sub validate_ipv4address {
 
       # Min value exceeded.  Now check against the max value in the current row.
       if ($packed_ip <= $ipv4_table[$i][1]) {
+
+        # Bingo!  This address IS in one of the ranges!
+        $response_key = "535";
+        return $response_key;
+      }
+    }
+  }
+
+  # Return normal, "no error found" results.
+  return $response_key;
+}
+
+# =========================================================================
+#
+# This procedure validates an IPv6 address.
+#
+# =========================================================================
+sub validate_ipv6address {
+  my ($ipv6address) = @_;
+
+  my $i;
+  my $response_key = "200";
+  my $packed_ip = 0;
+
+  # Check this address for syntax correctness and convert to number format.
+  if (($packed_ip = ipv6_tonum($ipv6address)) < 0) {
+    $response_key = "541";
+    return $response_key;
+  }
+
+  # Checked the packed format against the table of restricted addresses.
+  # The table contains rows of minimum and maximum values that define a range
+  # of addresses.  If this address falls within one of the ranges, it's a
+  # restricted address that can't be used for a public name server.
+  for $i (0 .. $#ipv6_table) {
+
+    # Check against the min value in the current row.
+    if ($packed_ip >= $ipv6_table[$i][0]) {
+
+      # Min value exceeded.  Now check against the max value in the current row.
+      if ($packed_ip <= $ipv6_table[$i][1]) {
 
         # Bingo!  This address IS in one of the ranges!
         $response_key = "535";
@@ -1576,6 +1639,7 @@ sub validate_server {
   my @elem = ();
   my $label = "";
   my $response_key = "";
+  my $last_label = "";
 
   # Check the length of the server string.
   if (length($server) < 1 || length($server) > 80) {
@@ -1590,10 +1654,18 @@ sub validate_server {
     @elem = split(/\./, $server);
     foreach $label (@elem) {
       $response_key = validate_label($label);
+      $last_label = $label;
       # Abort if we found an invalid label.
       if ($response_key ne "200") {
         last;
       }
+    }
+
+    if($last_label !~ /^(com|net|org)$/) {
+      $is_cctldns = 1;
+    }
+    else {
+     $is_cctldns = 0;
     }
   }
   else {
@@ -1725,7 +1797,7 @@ sub tokenize {
   # Count the number of instances of each line in the command.
   # Split the line into a token and value.
   foreach $line (@$lines) {
-    @elem = split(/:/, $line);
+    @elem = split(/:/, $line, 2);
 
     # See if the token represents a known command element.
     if ($commands{$elem[0]}) {

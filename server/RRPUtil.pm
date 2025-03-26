@@ -1,5 +1,5 @@
-# ===========================================================================
-# Copyright (C) 2000 Network Solutions, Inc.
+#===========================================================================
+# Copyright (C) 2000 VeriSign, Inc.
 # 
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -15,9 +15,9 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
 # 
-# Network Solutions, Inc. Registry
-# 505 Huntmar Park Dr.
-# Herndon, VA 20170
+# VeriSign Global Registry Service
+# 21345 Ridgetop Circle
+# Dulles, VA 20166
 # =========================================================================
 # The RRP, APIs and Software are provided "as-is" and without any warranty
 # of any kind.  NSI EXPRESSLY DISCLAIMS ALL WARRANTIES AND/OR CONDITIONS,
@@ -49,14 +49,14 @@ $VERSION = 1.10;
 @ISA = qw(Exporter);
 
 @EXPORT = qw(expiration_date inet_to64 renew_check 
-             validate_ipv4string);
+             validate_ipv4string validate_ipv6string ipv6_tonum);
 
 @EXPORT_OK = qw(expiration_date inet_to64 renew_check 
-                validate_ipv4string);
+                validate_ipv4string validate_ipv6string ipv6_tonum);
 
 %EXPORT_TAGS = (
   Functions => [qw(expiration_date inet_to64 renew_check
-                   validate_ipv4string)]);
+                   validate_ipv4string validate_ipv6string ipv6_tonum)]);
 
 # =========================================================================
 # This procedure builds an expiration date string based on the current date
@@ -198,6 +198,101 @@ sub inet_to64 {
   return ($packedIP);
 }
 
+#
+# Conver the IP v6 address into a number
+#
+sub ipv6_tonum {
+  my ($stringIP) = @_;
+
+  my @elem = ();
+  my @elemTmp = ();
+  my $hexelem = "";
+  my $packedIP = 0;
+  my $response = -1;
+  my $normalized_ip = "";
+  my $temp;
+
+  # Make sure the address is syntactically valid.
+  if($stringIP =~ /\:/) {
+
+    @elem = split(/\::/, $stringIP);
+
+    @elemTmp = split(/\:/, $stringIP);
+
+    #
+    # If there is a wild card then try to expand the IP Address
+    # 
+    if((@elem == 2) || (@elem == 1 && @elemTmp < 7 && $stringIP =~ /\::/)) {
+
+      if( $stringIP =~ /^::/ ) {
+        $stringIP =~ s/::/0000::/g;
+      }
+      elsif( $stringIP =~ /::$/ ) {
+        $stringIP =~ s/::/::0000/g;
+      }
+      else {
+        $stringIP =~ s/::/::0000:/g;
+      }
+
+      @elemTmp = split(/\:/, $stringIP);
+
+      while (@elemTmp < 8) {
+        $stringIP =~ s/::/::0000:/g;
+        @elemTmp = split(/\:/, $stringIP);
+      }
+
+      if(@elemTmp == 8) {
+        $stringIP =~ s/::/:0000:/g;
+      }
+      else {
+        $stringIP =~ s/::/:/g;
+      }
+    }
+
+    if( $stringIP =~ /:$/ ) {
+      return $response;
+    }
+
+    @elem = split(/\:/, $stringIP);
+
+    if(@elem != 8) {
+      return $response;
+    }
+    else {
+      #
+      # Check the length of each section
+      #
+      foreach $hexelem(@elem) {
+        if (length($hexelem) < 1 || length($hexelem) > 4) {
+          return $response;
+        }
+      }
+    }
+  }
+  else {
+    return $response;
+  }
+
+  # Address checks out, so parse it and grab each octet.
+  @elem = split(/\:/, $stringIP);
+
+  #
+  # Convert each label into a decimal value and make a number of the 
+  # ip address
+  #
+  foreach $hexelem(@elem) {
+    if(length($hexelem) < 1 || length($hexelem) > 4 || $hexelem =~ /[^A-Za-z0-9]/) {
+      return $response;
+    }
+
+    $temp = hex($hexelem);
+    $packedIP .= $temp;
+  }
+
+  # Finished!  Return the result.
+  return ($packedIP);
+}
+
 # =========================================================================
 # This procedure determines if there's time available to complete a RENEW
 # within the system-defined maximum registration period.
@@ -240,6 +335,11 @@ sub validate_ipv4string {
       $response = 1;
       return $response;
     }
+
+	if($ipv4string !~ /[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/) {
+		$response = 1;
+		return $response;
+	}
 
     # Look at each octet.
     foreach $octet (@elem) {
