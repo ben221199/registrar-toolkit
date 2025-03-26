@@ -1,0 +1,370 @@
+#!/usr/bin/perl -w
+# ===========================================================================
+# Copyright (C) 2000 Network Solutions, Inc.
+# 
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+# 
+# Network Solutions, Inc. Registry
+# 505 Huntmar Park Dr.
+# Herndon, VA 20170
+# =========================================================================
+# The RRP, APIs and Software are provided "as-is" and without any warranty
+# of any kind.  NSI EXPRESSLY DISCLAIMS ALL WARRANTIES AND/OR CONDITIONS,
+# EXPRESS OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+# AND CONDITIONS OF MERCHANTABILITY OR SATISFACTORY QUALITY AND FITNESS FOR
+# A PARTICULAR PURPOSE AND NONINFRINGEMENT OF THIRD PARTY RIGHTS.  NSI DOES
+# NOT WARRANT THAT THE FUNCTIONS CONTAINED IN THE RRP, APIs OR SOFTWARE
+# WILL MEET REGISTRAR'S REQUIREMENTS, OR THAT THE OPERATION OF THE RRP,
+# APIs OR SOFTWARE WILL BE UNINTERRUPTED OR ERROR-FREE,OR THAT DEFECTS IN
+# THE RRP, APIs OR SOFTWARE WILL BE CORRECTED.  FURTHERMORE, NSI DOES NOT
+# WARRANT NOR MAKE ANY REPRESENTATIONS REGARDING THE USE OR THE RESULTS OF
+# THE RRP, APIs, SOFTWARE OR RELATED DOCUMENTATION IN TERMS OF THEIR
+# CORRECTNESS, ACCURACY, RELIABILITY, OR OTHERWISE.  SHOULD THE RRP, APIs
+# OR SOFTWARE PROVE DEFECTIVE, REGISTRAR ASSUMES THE ENTIRE COST OF ALL
+# NECESSARY SERVICING, REPAIR OR CORRECTION.
+# =========================================================================
+#
+# rrps: A Simple NSI Registry Registrar protocol server stub.
+#
+# File name: rrps
+# Author: Scott Hollenbeck <shollenb@netsol.com>
+# Modified by: Chris Bason <chrisb@netsol.com>
+# 
+# =========================================================================
+use locale;
+use RRPCommands 1.10;
+use RRPCache 1.10;
+use RRPUtil 1.10;
+use Socket;
+
+# Define basic default values and other globals.
+$ban_date = "";
+$banner = "NSI RRP Server version";
+$children = 0;
+$cfg_file = "rrps.cfg";
+%cfg = ();
+$crlf = "\r\n";
+$default_port = 648;
+@ipv4 = ();
+$ipv4_cfg_file = "ipv4.cfg";
+$mtime = 0;
+$rrp_version = "1.1.0";
+
+# =========================================================================
+#
+# We need a local signal handler to manage exiting forked processes.
+#
+# =========================================================================
+sub REAPER {
+  my $waitedpid = wait;
+
+  # reset just to make sure
+  $SIG{CHLD} = \&REAPER;
+  --$children;
+}
+
+# =========================================================================
+#
+# We need a this function to read from the client socket because we 
+# are performing a select on it to allow for a timeout to occur.
+#
+# =========================================================================
+sub getline {
+
+  my $buffer = "";
+  my $byte = "";
+  my $notdone = 1;
+
+  while ($notdone) {
+    if (sysread(CLIENT, $byte, 1) > 0) {
+      $buffer .= $byte;
+
+      if ($byte eq "\n") {
+        $notdone = 0;
+      }
+    }
+    else {
+      $notdone = 0;
+    }
+  }
+
+  return $buffer;
+}
+
+# =========================================================================
+#
+# OK, main code starts here.  Seed the random number generator using the
+# current system time.  It's not exactly secure, but it's good enough for
+# this application.
+#
+# =========================================================================
+print("RRPS: Starting server...\n");
+srand(time);
+
+# Capture command line arguments.
+($server_port) = @ARGV;
+
+# Note a non-default port argument, if provided.
+$server_port = $default_port unless $server_port;
+
+# Open, read, and process the configuration files.
+print("RRPS: Processing configuration files...\n");
+open(CONFIG, "< $cfg_file")
+  or die "RRPS: Couldn't open configuration file $cfg_file: $!.\n";
+  
+while (<CONFIG>) {
+  chomp;              # Remove newline.
+  s/#.*//;            # Remove comments.
+  s/^\s+//;           # Remove leading white space.
+  s/\s+$//;           # Remove trailing white space.
+  next unless length; # get the next line if there's nothing left.
+  my ($key, $value) = split(/\s*=\s*/, $_, 2);
+  $cfg{$key} = $value;
+}
+close(CONFIG);
+
+# Set configuration timers to values in seconds.
+$cfg{"IdleTimeout"} *= 60;
+$cfg{"SessionTimeout"} *= 60;
+
+# Now process the IPv4 restricted address configuration file.
+open(CONFIG, "< $ipv4_cfg_file")
+  or die "RRPS: Couldn't open configuration file $ipv4_cfg_file: $!.\n";
+  
+while (<CONFIG>) {
+  chomp;              # Remove newline.
+  s/#.*//;            # Remove comments.
+  s/^\s+//;           # Remove leading white space.
+  s/\s+$//;           # Remove trailing white space.
+  next unless length; # get the next line if there's nothing left.
+  my ($minIP, $maxIP) = split(/\s*-\s*/, $_, 2);
+
+  # Convert each address to 64-bit format.
+  if (($new_minIP = inet_to64($minIP)) == -1) {
+    die "RRPS (Fatal Error): Invalid IPv4 address $minIP.\n";
+  }
+  if (($new_maxIP = inet_to64($maxIP)) == -1) {
+    die "RRPS (Fatal Error): Invalid IPv4 address $maxIP.\n";
+  }
+
+  # Add the min and max values to the table.
+  push @ipv4, [$new_minIP, $new_maxIP];
+}
+close(CONFIG);
+
+# Initialize the server cache
+cache_init(\%cfg);
+
+# fork child to handle cache requests
+if ((fork()) == 0) {
+  process_cache_requests();
+  exit;
+}
+
+# Set up the TCP socket.
+print("RRPS: Creating server socket...\n");
+
+# Disable buffering of standard output from the server.
+$old_fh = select(STDOUT);
+$| = 1;
+select($old_fh);
+
+# Determine the server "build" time for return to the client.
+# The "last modified" time of this file is used.
+$mtime = (stat($0))[9];
+($sec, $min, $hour, $mday, $mon, $year, $wday, undef, undef) = gmtime($mtime);
+$now_day = (qw(Sun Mon Tue Wed Thu Fri Sat))[$wday];
+$now_mon = (qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec))[$mon];
+$now_year = $year + 1900;
+$mday = "0" . $mday unless (length($mday) == 2);
+$hour = "0" . $hour unless (length($hour) == 2);
+$min = "0" . $min unless (length($min) == 2);
+$sec = "0" . $sec unless (length($sec) == 2);
+$ban_date = "$now_day $now_mon $mday $hour:$min:$sec GMT $now_year";
+
+# Create a TCP socket.
+socket(SERVER, PF_INET, SOCK_STREAM, getprotobyname('tcp'));
+
+# Set socket options.
+setsockopt(SERVER, SOL_SOCKET, SO_REUSEADDR, 1);
+
+# Set up the connection on the designated port.
+$my_addr = sockaddr_in($server_port, INADDR_ANY);
+bind(SERVER, $my_addr)
+  or die "RRPS (Fatal Error): Unable to bind to TCP port $server_port: $!.\n";
+
+# Establish a queue for incoming connections.
+listen(SERVER, SOMAXCONN)
+  or die "RRPS (Fatal Error): Unable to listen on TCP port $server_port: $!.\n";
+print("RRPS: Listening on TCP port $server_port...\n");
+
+# Set the child process cleanup handler.
+$SIG{CHLD} = \&REAPER;
+
+# Accept and process client connections indefinitely.
+for ( ; ; ) {
+
+  # Wait here for a client connection.
+  $client_address = accept(CLIENT, SERVER) || next;
+
+  # Keep track of the number of child processes.
+  ++$children;
+
+  # Disable buffering of output to the client.
+  $old_fh = select(CLIENT);
+  $| = 1;
+  select($old_fh);
+
+  # Fork off a child process and loop around for another connection.
+  if (($child = fork()) == 0) {
+
+    # start the session timer for this client
+    $sessionTimeStart = time();
+
+    # We're in the child process, which doesn't need the server socket.
+    close(SERVER);
+
+    # Child processing starts here.
+    # Note the client's port and IP address for logging purposes.
+    ($port, $packed_ip) = sockaddr_in($client_address);
+    $ipadd = inet_ntoa($packed_ip);
+    print("RRPS: Connection from $ipadd port $port ($children open).\n");
+
+    # Send banner text to the client.
+    print CLIENT ("$banner $rrp_version$crlf$ban_date$crlf.$crlf");
+
+    # Read and respond to commands from the client.
+    $stay_open = 1;
+    $rrp_command = "";
+    $timeout = 10;
+    $commands_executed = 0;
+
+    # start time idle timer for this client
+    $idleTimeStart = time();
+
+    while ($stay_open) {
+
+      # set up for select so we can check idle timeouts
+      $readin = $excepin = "";
+      vec($readin, fileno(CLIENT), 1) = 1;
+      $excepin = $readin;
+
+      $nfound = select($rout=$readin, undef, $eout=$excepin, $timeout);
+
+      if ($nfound == 1) {
+        # we are only looking for one descriptor
+        # check to see if rout equals readin
+        if (unpack("b*", $readin) eq unpack("b*", $rout)) {
+
+          # use our getline function to get the entire 
+          # line from the socket
+          $rrp_buffer = getline();
+
+          if (not defined $rrp_buffer) {
+            # client must have closed the connection
+            $stay_open = 0;
+          }
+          else {
+            # reset the idle time value
+            $idleTimeStart = time();
+
+            # ignore blank lines
+            if ($rrp_buffer ne $crlf) {
+
+              $rrp_command .= $rrp_buffer;
+
+              # check the command size here. If it is too large 
+              # send error and disconnect.
+              if (length($rrp_command) > $cfg{"MaxCommandSize"}) {
+                $response = get_response("520");
+                print CLIENT ("$response; command too large$crlf.$crlf");
+                $stay_open = 0;
+              } 
+              else {
+
+                # Look for an end-of-command delimiter on a line by itself.
+                if ($rrp_buffer =~ /^\.\r\n/) {
+
+                  # End-of-command delimiter found.  
+                  # Process the command.
+                  # Note that the command processor determines 
+                  # when to close the connection.
+                  if ($cfg{"CommandTimeout"} <= 0 || 
+                    $commands_executed < $cfg{"CommandTimeout"}) {
+                    ($stay_open, $response) = 
+                        process_command(\%cfg, $rrp_command);
+                    ++$commands_executed;
+                    $rrp_command = "";
+                    print CLIENT ($response);
+                  }
+                  else
+                  {
+                    # simulate command timeout
+                    sleep(20);
+                    $response = get_response("520");
+                    print CLIENT ("$response; command timeout$crlf.$crlf");
+                    $stay_open = 0;
+                  }
+
+                } # end of check for end-of-command
+
+              } # end of else after length check
+
+            } # end of check for empty buffer 
+
+          } # end of else after check for buffer definition
+
+        } # end of if for nfound
+        # check for exception from select
+        elsif (unpack("b*", $excepin) eq unpack("b*", $eout)) {
+          # some exception happened on the socket; terminate loop
+          print("RRPS: $ipadd port $port exception occurred.\n");
+          $stay_open = 0;
+        }
+      }
+      else {
+        # timeout occured check against idle or session timeout
+
+        if ($cfg{"IdleTimeout"} > 0) {
+          if ((time() - $idleTimeStart) >= $cfg{"IdleTimeout"}) {
+            $response = get_response("520");
+            print CLIENT ("$response; idle timeout$crlf.$crlf");
+            $stay_open = 0;
+          }
+        }
+        elsif ($cfg{"SessionTimeout"}) {
+          if ((time() - $sessionTimeStart) >= $cfg{"SessionTimeout"}) {
+            $response = get_response("520");
+            print CLIENT ("$response; thread timeout$crlf.$crlf");
+            $stay_open = 0;
+          }
+        }
+      }
+    } # end of while
+
+    # Clean up before exiting.
+    print("RRPS: $ipadd port $port closed connection.\n");
+    close(CLIENT);
+    exit;
+  }
+
+  # This is where the parent returns after the fork.
+  die "RRPS (Fatal Error): Unable to fork child process: $!.\n"
+    unless defined $child;
+  close(CLIENT);
+}
+
+# Close the server.
+close(SERVER);

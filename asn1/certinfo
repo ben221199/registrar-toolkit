@@ -1,0 +1,215 @@
+#!/usr/bin/perl -d
+####!/usr/bin/perl -d
+# rrps: A Simple NSI Registry Registrar protocol server stub.
+#
+# File name: certinfo 
+# Author: Scott Hollenbeck <shollenb@netsol.com>
+# 
+# Copyright © 1998-2000, Network Solutions, Inc., All Rights Reserved
+# 505 Huntmar Park Dr.
+# Herndon, VA 20170
+# USA
+# 
+# The software contained in this file is free software; you can redistribute
+# it and/or modify it under the terms of the NSI General Public License
+# (version 1.0 or later) as published by Network Solutions, Inc.
+
+# This software is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the NSI General Public License for
+# more details.
+# 
+# You should have received a copy of the NSI General Public License along with
+# this software.  If not, a copy may be retrieved from the web at:
+# 
+# http://www.NSIRegistry.net/opensource/nsigpl.txt
+#
+use Time::gmtime;
+use Time::Local;
+use Getopt::Std;
+
+#use Date::Calc qw(:all);
+
+# Command line arguments. 
+$opt_d = 0;
+$opt_h = 0;
+getopts("d:h"); # sets $opt_d and $opt_h
+
+$warning_interval = 30;
+
+if ($opt_d) {
+	$warning_interval = $opt_d;
+}
+
+if ($opt_h || !@ARGV) {
+	print("\nUsage: $0 [options] [filename]\n");
+	print("\t-d [uint]\tWarning duration in days\n");
+	print("\n");
+	exit(1);
+}
+
+# Warning messages.
+$expired = "WARNING: This certificate has expired.";
+$not_yet_valid = "WARNING: This certificate's validity period has not started.";
+$all_ok = "This certificate is within its validity period.";
+$expiring_soon = "WARNING: This certificate will expire in $warning_interval days or less.";
+
+# Variables.
+$asn1_dump = "";
+$cert_string = "";
+$country = "countryName";
+$org_name = "organizationName";
+$org_unit = "organizationalUnitName";
+$utc_time = "UTCTime";
+$state_province = "stateOrProvinceName";
+$locality = "localityName";
+$common_name = "commonName";
+$grab_next = 0;
+$found_issuer = 0;
+$found_validity = 0;
+$final_message = $all_ok;
+
+# Note the current date and time for comparison with the certificate validity period.
+
+# Send the certificate file to the dumper for decoding and capture the output.
+($cert_file) = @ARGV;
+$asn1_dump = `dumpasn1 $cert_file`;
+
+# Parse the output, looking for the issuer name, subject name, start date, and expiration date.
+print ("Information for certificate file $cert_file...\n\nCertificate Issuer Name:\n");
+
+@lines = split('\n', $asn1_dump);
+foreach $line (@lines) {
+  if ($grab_next == 1) {
+    @elem=split(/'/, $line);
+    $cert_string .= $elem[1];
+    print ("  $cert_string\n");
+    $cert_string = "";
+    $grab_next = 0;
+  }
+
+# The first DN we find is the issuer name.
+  if ($line =~ m/$country/) {
+    if ($found_issuer == 1) {
+      print ("\nCertificate Subject Name:\n");
+    }
+    else {
+      $found_issuer = 1;
+    }
+    $grab_next = 1;
+    $cert_string = "Country: ";
+    next;
+  }
+  if ($line =~ m/$org_name/) {
+    $grab_next = 1;
+    $cert_string = "Organization Name: ";
+    next;
+  }
+  if ($line =~ m/$org_unit/) {
+    $grab_next = 1;
+    $cert_string = "Organizational Unit: ";
+    next;
+  }
+  if ($line =~ m/$utc_time/) {
+    if ($found_validity == 1) {
+      print ("  Expiration Date: ");
+			@elem = split(/'/, $line);
+			$expiration_date = $elem[1];
+			print(localtime(convertToEpochSeconds($expiration_date)) . "\n");
+			#print("  " . getExpirationMessage($expiration_date,$start_date,$warning_interval) ."\n");
+
+			$final_message =  getExpirationMessage($expiration_date,$start_date,$warning_interval);
+			print("  " . "This certificate expires in " . getDaysUntilExpiration($expiration_date) . " days.\n");
+			
+    }
+	 	else {
+      $found_validity = 1;
+      print ("\nCertificate Validity Period:\n  Start Date: ");
+
+			# Validity period is a bit different -- the value we need is on this line.
+			@elem=split(/'/, $line);
+			$start_date = $elem[1];
+			#chop($start_date);
+
+		# Translate the date/time value into something more readable.
+    	print (localtime(convertToEpochSeconds($start_date)) . "\n");
+ 		}
+		# Note any warnings.
+    next;
+  }
+  if ($line =~ m/$state_province/) {
+    $grab_next = 1;
+    $cert_string = "State/Province: ";
+    next;
+  }
+  if ($line =~ m/$locality/) {
+    $grab_next = 1;
+    $cert_string = "Locality: ";
+    next;
+  }
+  if ($line =~ m/$common_name/) {
+    $grab_next = 1;
+    $cert_string = "Common Name: ";
+    next;
+  }
+}
+
+print ("\n$final_message\n");
+1;
+
+sub getExpirationMessage {
+
+	#params: $expiration_time - in DMYHMS, $start_time - in DMYHMS
+	# $warning_interval - warning time in days
+	my($expiration_time,$start_time,$warning_interval_days) = @_;
+	
+	#convert days to seconds
+	$warning_interval_seconds = $warning_interval_days * 24 * 60
+	* 60;  
+	
+	
+	$current_time = time();
+	$expiration_time = convertToEpochSeconds($expiration_time);
+	$start_time = convertToEpochSeconds($start_time);
+	
+	$time_difference = ($expiration_time - $current_time);
+
+	if ($time_difference < 0) {
+		return $expired;
+	} 
+	elsif ($time_difference > 0 && $time_difference <= $warning_interval_seconds) {
+		return $expiring_soon;
+	} 
+	elsif ($current_time < $start_time) {
+		return $not_yet_valid;
+	}
+
+	return $all_ok;
+}
+
+sub convertToEpochSeconds {
+
+# parses a string of form 'YYMMDDHHMMSS' and returns it's value in seconds from the epoch (Jan 1, 1970)
+
+	my($date_string) = @_;
+	
+	($year, $month, $day, $hour, $minute, $second) = ($date_string =~ /(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/);
+	return timegm($second, $minute, $hour, $day, $month, $year);
+}
+
+sub getDaysUntilExpiration {
+
+	my ($today) = gmtime();
+	my ($today_epoch_seconds) = timegm($today->sec, $today->min, $today->hour, 
+										$today->mday, $today->mon, $today->year);
+
+	my ($expiration) = @_;
+	my ($expiration_epoch_seconds) = convertToEpochSeconds($expiration);
+	my ($expiration_seconds) = $expiration_epoch_seconds - $today_epoch_seconds;
+
+ $expiration_seconds = $expiration_seconds / 60 / 60 / 24;
+ $expiration_seconds =~ s/["."].*//;
+	
+	return $expiration_seconds; 
+}
+

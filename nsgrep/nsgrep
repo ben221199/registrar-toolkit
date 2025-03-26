@@ -1,0 +1,217 @@
+#!/usr/local/bin/perl -w
+# ===========================================================================
+# Copyright (C) 2000 Network Solutions, Inc.
+# 
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
+# 
+# Network Solutions, Inc. Registry
+# 505 Huntmar Park Dr.
+# Herndon, VA 20170
+# =========================================================================
+# The RRP, APIs and Software are provided "as-is" and without any warranty
+# of any kind.  NSI EXPRESSLY DISCLAIMS ALL WARRANTIES AND/OR CONDITIONS,
+# EXPRESS OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+# AND CONDITIONS OF MERCHANTABILITY OR SATISFACTORY QUALITY AND FITNESS FOR
+# A PARTICULAR PURPOSE AND NONINFRINGEMENT OF THIRD PARTY RIGHTS.  NSI DOES
+# NOT WARRANT THAT THE FUNCTIONS CONTAINED IN THE RRP, APIs OR SOFTWARE
+# WILL MEET REGISTRAR'S REQUIREMENTS, OR THAT THE OPERATION OF THE RRP,
+# APIs OR SOFTWARE WILL BE UNINTERRUPTED OR ERROR-FREE,OR THAT DEFECTS IN
+# THE RRP, APIs OR SOFTWARE WILL BE CORRECTED.  FURTHERMORE, NSI DOES NOT
+# WARRANT NOR MAKE ANY REPRESENTATIONS REGARDING THE USE OR THE RESULTS OF
+# THE RRP, APIs, SOFTWARE OR RELATED DOCUMENTATION IN TERMS OF THEIR
+# CORRECTNESS, ACCURACY, RELIABILITY, OR OTHERWISE.  SHOULD THE RRP, APIs
+# OR SOFTWARE PROVE DEFECTIVE, REGISTRAR ASSUMES THE ENTIRE COST OF ALL
+# NECESSARY SERVICING, REPAIR OR CORRECTION.
+# =========================================================================
+#
+# This is a perl script that searches zone files for domains using
+# particular name servers.  Output is sent to stdout by default, but can of
+# course be redirected as desired.  It's intended to be somewhat smarter
+# than a simple search using utilities like grep.
+#
+# Usage: nsgrep [-o <origin>] zone-file-name list-of-nameservers...
+#
+# This script was written to parse zone files produced by the NSI Registry.
+# It might not work properly for zone files that use certain short cuts, such
+# as leaving out names for resource records.  Caveat emptor.
+#
+# File name: nsgrep
+# Author: Scott Hollenbeck <shollenb@netsol.com>
+# 
+# =========================================================================
+
+# Define basic default values and other globals.
+$count = 0;
+$nscount = 0;
+@rr = ();
+$rrname = "";
+%seen = ();
+$temp = "";
+$zone_file = "";
+
+# Capture command line arguments.  The first argument MAY be a "-o" to identify
+# the zone file origin.  If used, the next argument MUST be the origin itself.
+# The following argument MUST be the name of the zone file to search.
+# Remaining arguments are a list of server names to search for.
+($temp) = @ARGV;
+
+# check to see if anything was passed in on the command line
+if (not defined $temp) {
+  print STDOUT "\nUsage:\n"; 
+  print STDOUT "\tnsgrep [-o <origin>] zone-file-name list-of-nameservers...";
+  print STDOUT "\n\n";
+  exit;
+}
+
+# See if an origin was provided.  This might happen if the SOA record in the
+# zone file uses "@" notation to define the origin, meaning that the value
+# should come from one of the BIND configuration files.  Well, that's fine for
+# BIND, but it doesn't help here because this script doesn't read BIND's
+# configuration files!  The value provided by the user will be used by default
+# unless an origin is provided with the name server (NS) records found.
+if ($temp eq "-o") {
+  shift;
+  ($origin) = @ARGV;
+  shift;
+}
+
+# Now note the name of the zone file to be searched.
+($zone_file) = @ARGV;
+shift;
+
+# Disable buffering of standard output.
+$old_fh = select(STDOUT);
+$| = 1;
+select($old_fh);
+
+# Open the zone file.
+open(ZONE, "< $zone_file")
+  or die "Couldn't open zone file $zone_file: $!.\n";
+print("Searching $zone_file...\n\n");
+
+# Initialize the  hash table of name servers being searched for.
+# Strings are converted to lower case for case-insensitive pattern matching.
+foreach $temp (@ARGV) {
+  $temp = lc($temp);
+  $seen{$temp} = undef;
+}
+
+# Find the SOA record.  It MUST be the first resource record in the file.
+while (<ZONE>) {
+  chomp;              # Remove newline.
+  s/;.*//;            # Remove comments.
+  s/^\s+//;           # Remove leading white space.
+  s/\s+$//;           # Remove trailing white space.
+  next unless length; # Get the next line if there's nothing left.
+
+# Process $ORIGIN specifications that might appear before the SOA record.
+  if ($_ =~ /^\$ORIGIN/) {
+    ($temp, $origin) = split(/\s/, $_);
+    $origin = lc($origin);
+    if ($origin =~ /\.$/) {
+      chop($origin);
+    }
+    next;
+  }
+
+# The first resource record MUST be an SOA record.
+  if ($_ !~ /\sSOA\s/i) {
+    die "Error: SOA record is not first record in file at line $..\n";
+  }
+  else {
+# Found the SOA record, note the origin.  Remove trailing dot if present.
+    ($temp) = split(/\s/, $_);
+    if ($temp ne "@") {
+      $origin = lc($temp);
+      if ($origin =~ /\.$/) {
+        chop($origin);
+      }
+    }
+    last;
+  }
+}
+
+# Now search the zone file for NS records.
+while (<ZONE>) {
+
+# Process $ORIGIN specifications that might appear before an NS record.
+  if ($_ =~ /^\$ORIGIN/) {
+    ($temp, $origin) = split(/\s/, $_);
+    $origin = lc($origin);
+    if ($origin =~ /\.$/) {
+      chop($origin);
+    }
+    next;
+  }
+  next unless ($_ =~ /\sNS\s/i); # Ignore non-NS records.
+
+# We have something that might be an NS record.  Clean it up.
+  chomp;              # Remove newline.
+  s/;.*//;            # Remove comments.
+
+# Capture the record name.  It's there if there's no whitespace in column 1.
+  if ($_ !~ /^\s/) {
+    ($rrname) = split(/\s/, $_);
+  }
+  s/^\s+//;           # Remove leading white space.
+  s/\s+$//;           # Remove trailing white space.
+  next unless length; # Get the next line if there's nothing left.
+
+# Looks like a legitimate NS record.  Split it into fields.
+  $nscount++;
+  @rr = split(/\s/, $_);
+
+# Compare the rdata field (the last field) to the list of name servers.
+# The value being looked at is converted to lower case and the trailing dot
+# is removed to obtain the format used in the "seen" hash keys.
+  $rd_index = @rr - 1;
+  $rdata = lc($rr[$rd_index]);
+  if ($rdata =~ /\.$/) {
+    chop($rdata);
+  }
+
+# See if this name matches one that we're looking for.
+  if (exists $seen{$rdata}) {
+    $rrname = lc($rrname);
+    $seen{$rdata}++;
+
+# Remove trailing dot from the record name if it exists.
+    if ($rrname =~ /\.$/) {
+      chop($rrname);
+    }
+# Add origin to the record name if needed.
+    elsif ($rrname !~ /\.$origin$/) {
+      $rrname .= "." . $origin;
+    }
+    print("$rdata:$rrname\n");
+    $count++;
+  }
+}
+close(ZONE);
+
+# Finished!
+print("\nSearch of $nscount NS records completed; ");
+if ($count > 1) {
+  print("$count total matches found:\n");
+}
+else {
+  print("$count match found:\n");
+}
+foreach $temp (sort keys %seen) {
+  if (defined $seen{$temp}) {
+    print "$temp: $seen{$temp} matches\n";
+  }
+}
+1;

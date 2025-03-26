@@ -1,0 +1,203 @@
+NSI Registry
+Copyright (c) 1999 Network Solutions, Inc. All rights reserved.
+
+Network Solutions, Inc.
+505 Huntmar Park Dr.
+Herndon, VA 20170
+USA
++1 703 925 6999
+mailto:info@NSIRegistry.net
+
+
+Release Notes History
+---------------------
+
+July 18, 2000
+
+This release inlcudes minor fixes to the RRP C and Java APIs. 
+In addition, this SDK is now being released under the GNU Lesser 
+General Public License. Please review the lgpl-license.txt file 
+for further information.
+
+The RRP 1.1.0 specification document has been removed from this 
+release. The RRP specification is now published by the IETF as 
+RFC2832. Please refer to following URL for the most current 
+RRP specification (http://www.ietf.org/rfc/rfc2832.txt).
+
+This distribution contains the following files:
+1. relnotes.txt (this file)
+2. install.txt
+3. readme.txt
+4. lgpl-license.txt
+5. Documentation directory: Javadoc for the Java RRP API, C API document, 
+and Enabling SSL documentation
+6. API directory: contains the C and the Java RRP APIs, including the source
+code.
+
+The following changes have been implemented in the RRP C API:
+
+1. The RRP Session command (RRPStartSession) has been modified. 
+The variable parameter list has been removed from the function 
+due to the invalid use of the va_start, va_end, and va_args macros. 
+Prior to this release the third parameter was an optional character 
+pointer to a new registrar password. This function now requires the 
+third parameter. It is acceptable to pass NULL when there is no need 
+to change the registrar password.
+
+2. The RRP Renew command (RRPRenewDomain) has been modified.
+The variable parameter list has been removed from the function 
+due to the invalid use of the va_start, va_end, and va_args macros. 
+Prior to this release the function had two optional parameters of 
+type integer. The two optional parameters were the renewal registration
+period and the current expiration date of the domain being renewed.
+This function now requires these two parameters. It is acceptable to 
+pass -1 or 0 when the Registry default values are desired. 
+
+2. The RRP Add command (RRPAddDomain) has been modified.
+The variable parameter list has been removed from the function 
+due to the invalid use of the va_start, va_end, and va_args macros. 
+Prior to this release the function had an optional parameter of 
+type integer. The optional parameter was the initial registration
+period of the domain being added. This function now requires this 
+parameter. It is acceptable to pass -1 or 0 when the Registry default 
+value is desired. 
+
+The following changes have been implemented in the RRP Java API:
+
+1. The RRPSession constructor was modified to set the correct
+socket timeout value passed in to the method.
+
+---------------------
+
+December 3, 1999
+
+This release includes an RRP specifications document written in
+Internet-Draft format.  Though the NSI Registry is actively engaged
+in an effort to publish RRP 1.1.0 as an Internet-Draft, the version
+included with this SDK has not been published by the IETF and is
+subject to editorial revisions before it is officially published.
+The final version of the document will be available directly from
+the IETF after it has been reviewed and accepted as an Internet-Draft.
+
+Please note that the RRP specifications document included with this
+release remains subject to all provisions of your confidentiality
+and licensing arrangements with the NSI Registry.
+
+This distribution contains the following files:
+1. relnotes.txt (this file)
+2. install.txt
+3. readme.txt
+4. license.txt
+5. Documentation directory: contains the RRP specifications document,
+Javadoc for the Java RRP API, C API document, and Enabling SSL
+documentation
+6. API directory: contains the C and the Java RRP APIs, including the source
+code.
+
+The following changes have been implemented in the RRP and the C and Java
+RRP APIs:
+
+1. The RRP Renew command has been modified to support two new options,
+"CurrentExpirationYear" and "Period". This has resulted in a modification to
+both the Java and C APIs. The request to renew a domain name MAY contain the
+renewal period in years for the domain being renewed in a single instance of
+a "Period" parameter and a single instance of a "CurrentExpirationYear"
+parameter. These parameters MUST appear together if either is specified,
+though the order in which the parameters appear is insignificant. Please
+refer to the RRP v1.1.0 specification for a more detailed description of
+the RRP Renew command.
+
+2. The RRP Add command has been modified to allow the user to specify
+the registration period for all new domain registrations. This has resulted 
+in a modification to both the Java and C APIs. Please refer to the RRP v1.1.0
+specification for a more detailed description of the RRP Add command.
+
+3. The RRP response codes have been modified
+
+  3 new response codes have been added to RRP:
+
+	- 554 Domain already registered
+	- 555 Domain already renewed
+	- 556 Maximum registration period exceeded
+
+  3 response codes have been remove from RRP:
+
+	- 120 Server closing connection
+	- 121 Idle timeout. Server closing connection
+	- 122 Session expired. Server closing connection
+
+All 3 of the conditions described by these response codes will be reported
+using response code 520 "Server closing connection. Client should try
+opening new connection".
+
+Please refer to the RRP v1.1.0 specification for a more detailed description
+of these response codes.
+---------------------
+
+August 12, 1999
+
+This release contains the following files:
+1. relnotes.txt (this file)
+2. readme.txt
+3. license.txt
+4. Documentation directory: contains the RRP specifications document in
+PDF format, Javadoc for the Java RRP API, C API document, and Enabling
+SSL documentation
+5. API directory: contains the C and the Java RRP APIs, including the
+source code.
+
+The following changes have been implemented in the RRP and the C and Java
+RRP APIs:
+
+1. The RRP Check command has been modified to allow the user to check
+for name server availability. If a name server is not available, then
+the IP address(es) of that name server will be returned. This has resulted
+in a modification to both the Java and C APIs.
+
+2. The RRP Session command has been modified to allow the registrar to
+modify their logon password while creating an authenticated session.
+This modification has resulted in a modification to both the Java and C APIs.
+
+3. Both APIs now support a new timeout feature to prevent hung connections.
+
+The following changes have been implemented regarding our SSL client
+authentication policies:
+
+1. All registrars are now required to obtain one or more RSA certificates
+from Thawte (http://wwww.thawte.com) or Verisign (http:/www.verisign.com). We
+are currently not accepting self-signed certificates or DSA certificates.
+
+
+Please refer to the following files within the Documentation directory
+for a more detailed description of these changes:
+
+RegistryAPI.html
+EnablingSSL.html
+Registry_Registrar_Protocol_v1_0_5.doc
+All HTML files within 'javadoc' directory
+---------------------
+
+June 16, 1999
+
+This CD contains the following files:
+1. relnotes.txt (this file)
+2. install.txt 
+3. readme.txt 
+4. license.txt
+5. Documentation directory: contains the RRP specifications document, 
+Javadoc for the Java RRP API, C API document, and Enabling SSL 
+documentation
+6. API directory: contains the C and the Java RRP APIs, including the source
+code.
+
+The following changes have been implemented in the RRP and the C and Java
+RRP APIs:
+
+1. The C API has been slightly modified since its previous release.
+The previous 'RRPStatusNameServer' function was missing the 'listDomains'
+parameter. This parameter is now supported by this function.
+
+
+
+
+
