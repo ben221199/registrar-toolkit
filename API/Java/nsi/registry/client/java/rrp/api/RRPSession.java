@@ -67,6 +67,12 @@ import java.util.Enumeration;
  * 
  * Add another 'optional option' currentExpirationYear to renewDomain 
  * interface. 
+ * 
+ * @modified by Yar-Ping Chen
+ * @version    2.1 10/09/2002
+ * 
+ * Add syncDomain and restoreDomain interfaces. 
+ *
  */
 
 public class RRPSession {
@@ -979,8 +985,88 @@ public class RRPSession {
 	} // renewDomain()
 
 
+	/**
+	 * Enables a registrar to restore a domain 
+	 *
+ 	 * @param domainName  A fully qualified domain name to restore
+	 *
+	 * @return  a Response object containing the response code, description
+	 *          and attributes - if applicable - returned from the RRP request
+	 *
+	 * @exception RRPException  if <code>domainName</code> is null 
+	 *                          or if any internal errors occur
+	 */
+	public Response restoreDomain (String domainName)
+	throws RRPException {
+
+		//
+		// Validate arguments
+		//
+		if (domainName == null) {
+			throw new RRPException("null argument: domainName");
+		}
+
+		//
+		// Build the raw RRP request
+		//
+		StringBuffer buf = new StringBuffer();
+
+		buf.append("Restore\r\n");
+		buf.append("EntityName:Domain\r\n");
+		buf.append("DomainName:" + domainName + "\r\n");
+		buf.append(".\r\n");
+
+		//
+		// Process the request and return the response
+		//	
+		return processRequest(buf.toString());
+
+	} // restoreDomain()
 
 
+	/**
+	 * Enables a registrar to sync the registration of a domain name
+	 *
+ 	 * @param domainName  A fully qualified domain name to sync
+ 	 * @param date  	  The month and day for the new expiration date.
+	 *					  The date must be in the format mm-dd(e.g., 01-05)
+	 *
+	 * @return  a Response object containing the response code, description
+	 *          and attributes - if applicable - returned from the RRP request
+	 *
+	 * @exception RRPException  if <code>domainName</code> is null 
+	 *                          or if any internal errors occur
+	 */
+	public Response syncDomain (String domainName, String syncDate)
+	throws RRPException {
+
+		//
+		// Validate arguments
+		//
+		if (domainName == null) {
+			throw new RRPException("null argument: domainName");
+		}
+
+		if (syncDate == null) {
+			throw new RRPException("null argument: syncDate");
+		}
+		//
+		// Build the raw RRP request
+		//
+		StringBuffer buf = new StringBuffer();
+
+		buf.append("Sync\r\n");
+		buf.append("EntityName:Domain\r\n");
+		buf.append("DomainName:" + domainName + "\r\n");
+		buf.append("Date:" + syncDate + "\r\n");
+		buf.append(".\r\n");
+
+		//
+		// Process the request and return the response
+		//	
+		return processRequest(buf.toString());
+
+	} // syncDomain()
 
 
 

@@ -141,6 +141,18 @@
 ** RRPRESPONSE* RRPAddDomain(char*, RRPVECTOR*, int);
 ** RRPRESPONSE* RRPRenewDomain(char *, int, int);
 **
+**
+** Modified by: Yar-Ping, Chen
+** Version: 2.1 for RRP version 2.1.0
+**
+** Date: Dec, 2002 
+** Changes:
+** 
+** The RRPSyncDomain, RRPRestoreDomain functions have been added.
+**
+** RRPRESPONSE* RRPSyncDomain(char*, char*);
+** RRPRESPONSE* RRPRestoreDomain(char*);
+**
 */
 
 #include <stdlib.h>
@@ -903,6 +915,50 @@ RRPRESPONSE* RRPRenewDomain (
 
 /*
 **
+** Function: RRPRestoreDomain
+**
+** Description: Restore a domain name
+**
+** Input: char* - a fully qualified domain name to restore
+**
+** Output: none
+**
+** Return: RRPRESPONSE* - a pointer to an RRPRESPONSE structure containing
+**                        the components of the RRP response returned from
+**                        the server. NULL is return is an internal error
+**                        occurs.
+**
+** Note: THE MEMORY ALLOCATED FOR THE RRPRESPONSE STRUCTURE MUST BE
+**       RELEASED BY CALLING THE RRPFreeResponse() FUNCTION (SEE FUNCTION
+**       DESCRIPTION BELOW)
+**
+*/
+RRPRESPONSE* RRPRestoreDomain (
+	char* domainName
+) {
+	char* request = NULL;
+
+	/*
+	** Validate parameters
+	*/
+	if (domainName == NULL) {
+		RRPSetInternalErrorCode(RRP_BAD_PARAM_ERROR);
+		return NULL;
+	}
+
+	request = mySprintf("Restore\r\nEntityName:Domain\r\n"
+		"DomainName:%s\r\n.\r\n", request, domainName);
+
+	if (request == NULL) {
+		return NULL;
+	}
+
+	return processRequest(request);
+
+} /* RRPRestoreDomain */
+
+/*
+**
 ** Function: RRPStatusDomain
 **
 ** Description: Query for the attributes of a domain name
@@ -990,6 +1046,57 @@ RRPRESPONSE* RRPStatusNameServer (
 	return processRequest(request);
 
 } /* RRPStatusNameServer */
+
+/*
+**
+** Function: RRPSyncDomain
+**
+** Description: Sync domain registration expiration date
+**
+** Input: char* - a fully qualified domain name to register
+**        char* - the new registration expiration date (mm-dd) 
+**
+** Output: none
+**
+** Return: RRPRESPONSE* - a pointer to an RRPRESPONSE structure containing
+**                        the components of the RRP response returned from
+**                        the server. NULL is return is an internal error
+**                        occurs.
+**
+** Note: THE MEMORY ALLOCATED FOR THE RRPRESPONSE STRUCTURE MUST BE
+**       RELEASED BY CALLING THE RRPFreeResponse() FUNCTION (SEE FUNCTION
+**       DESCRIPTION BELOW)
+**
+*/
+RRPRESPONSE* RRPSyncDomain (
+	char* domainName,
+	char* syncDate
+) {
+   char* request = NULL;
+
+	/*
+	** Validate parameters
+	*/
+	if ((domainName == NULL)|| (syncDate == NULL)) {
+		RRPSetInternalErrorCode(RRP_BAD_PARAM_ERROR);
+		return NULL;
+	}
+
+	request = mySprintf("Sync\r\nEntityName:Domain\r\nDomainName:%s\r\ndate:%s\r\n",
+		request, domainName, syncDate);
+
+	if (request == NULL) {
+		return NULL;
+	}
+
+	request = mySprintf(".\r\n", request);
+	if (request == NULL) {
+		return NULL;
+	}
+
+	return processRequest(request);
+
+} /* RRPSyncDomain */
 
 /*
 **

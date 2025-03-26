@@ -54,19 +54,19 @@ $VERSION = 1.10;
 
 @EXPORT = qw(process_command add_command check_command del_command 
              describe_command mod_command quit_command renew_command
-             session_command status_command transfer_command 
-             invalid_command get_response);
+             restore_command session_command status_command sync_command 
+             transfer_command invalid_command get_response);
 
 @EXPORT_OK = qw(process_command add_command check_command del_command 
                 describe_command mod_command quit_command renew_command
-                session_command status_command transfer_command 
-                invalid_command get_response);
+                restore_command session_command status_command sync_command 
+                transfer_command invalid_command get_response);
 
 %EXPORT_TAGS = (
   Functions => [qw(process_command add_command check_command del_command
                    describe_command mod_command quit_command renew_command
-                   session_command status_command transfer_command 
-                   invalid_command get_response)]);
+                   restore_command session_command status_command sync_command 
+                   transfer_command invalid_command get_response)]);
 
 # Private global variables.
 my $crlf = "\r\n";
@@ -74,7 +74,7 @@ my @ipv4_table = ();
 my @ipv6_table = ();
 my $session_established = 0;
 my $session_try_count = 0;
-my $version = "1.1.0";
+my $version = "2.1.0";
 
 # Returned attribute strings.
 my $attr_created_by = "created by:";
@@ -104,8 +104,10 @@ my %rrp_commands = (
   'mod'      => \&mod_command,
   'quit'     => \&quit_command,
   'renew'    => \&renew_command,
+  'restore'  => \&restore_command,
   'session'  => \&session_command,
   'status'   => \&status_command,
+  'sync'     => \&sync_command,
   'transfer' => \&transfer_command,
   'invalid'  => \&invalid_command);
 
@@ -223,6 +225,13 @@ my %renew_table = (
   '-period'                => \&validate_period,
   '-currentexpirationyear' => \&validate_year);
 
+my %restore_elements = (
+  'attributes'    => undef);
+
+my %restore_table = (
+  'entityname' => \&validate_entity,
+  'domainname' => \&validate_domain);
+
 my %session_elements = (
   'options'    => undef);
 
@@ -238,6 +247,14 @@ my %status_table = (
   'entityname' => \&validate_entity,
   'domainname' => \&validate_domain,
   'nameserver' => \&validate_server);
+
+my %sync_elements = (
+  'attributes'    => undef);
+
+my %sync_table = (
+  'entityname' => \&validate_entity,
+  'domainname' => \&validate_domain,
+  'date'       => \&validate_syncDate);
 
 my %transfer_elements = (
   'attributes' => undef,
@@ -975,6 +992,67 @@ sub renew_command {
 
 # =========================================================================
 #
+# RRP Restore command
+#
+# =========================================================================
+sub restore_command {
+  my ($lines, $cfg) = @_;
+
+  my $response = "";
+  my $response_key = "";
+  my %seen = ();
+  my $seen_p;
+  my $status = 1;
+  my %tokens = ();
+  my $tokens_p;
+
+  # A session must be established to use the RESTORE command.
+  if ($session_established == 0) {
+    $response_key = "547";
+    $response = $response_key . $response_codes{$response_key};
+    return ($status, $response);
+  }
+
+  # Restore command structure.
+  ($response_key, $tokens_p, $seen_p) = 
+  	tokenize(\@$lines, \%restore_table, \%restore_elements);
+  %tokens = %$tokens_p;
+  %seen = %$seen_p;
+
+  # Check validation results.  Check semantics if structure is OK.
+  if ($response_key eq "200") {
+
+    # Semantic checks.  Must have an entity name.
+    if (!($seen{"entityname"})) {
+      $response_key = "508";
+    }
+
+    # Must also have a domain name 
+    elsif (!$seen{"domainname"}) {
+      $response_key = "504";
+    }
+
+    # Check for inputs to cause forced error conditions.
+    if ($seen{"domainname"}) {
+      if ($tokens{"domainname"} eq lc($cfg->{"DomainError1"})) {
+        $response_key = "211";
+      }
+    }
+  }
+
+  # Results.  Optionally create a weighted random response.
+  if ($response_key eq "200") {
+    $response_key = rand_response(%response_hash);
+  }
+
+  $response = $response_key . $response_codes{$response_key};
+
+  return ($status, $response);
+}
+
+
+# =========================================================================
+#
 # RRP Session command
 #
 # =========================================================================
@@ -1173,10 +1251,10 @@ sub status_command {
       $response .= $attr_created_date . $cfg->{"CreateDate"} . $crlf;
       $response .= $attr_exp_date . $cfg->{"ExpireDate"} . $crlf;
       if ($cfg->{"CreateBy"}) {
-        $response .= $attr_updated_by . $cfg->{"CreateBy"};
+        $response .= $attr_created_by . $cfg->{"CreateBy"};
       }
       else {
-        $response .= $attr_updated_by . $cfg->{"RegistrarID"};
+        $response .= $attr_created_by . $cfg->{"RegistrarID"};
       }
 
       # Process name server list.
@@ -1203,10 +1281,10 @@ sub status_command {
       $response .= $attr_updated_date . $cfg->{"UpdateDate"} . $crlf;
       $response .= $attr_created_date . $cfg->{"CreateDate"} . $crlf;
       if ($cfg->{"CreateBy"}) {
-        $response .= $attr_updated_by . $cfg->{"CreateBy"};
+        $response .= $attr_created_by . $cfg->{"CreateBy"};
       }
       else {
-        $response .= $attr_updated_by . $cfg->{"RegistrarID"};
+        $response .= $attr_created_by . $cfg->{"RegistrarID"};
       }
 
       # Process IP address list.
@@ -1219,6 +1297,77 @@ sub status_command {
 
   return ($status, $response);
 }
+
+# =========================================================================
+#
+# RRP Sync command
+#
+# =========================================================================
+sub sync_command {
+  my ($lines, $cfg) = @_;
+
+  my $response = "";
+  my $response_key = "";
+  my %seen = ();
+  my $seen_p;
+  my $status = 1;
+  my %tokens = ();
+  my $tokens_p;
+
+  # A session must be established to use the SYNC command.
+  if ($session_established == 0) {
+    $response_key = "547";
+    $response = $response_key . $response_codes{$response_key};
+    return ($status, $response);
+  }
+
+  # Sync command structure.
+  ($response_key, $tokens_p, $seen_p) = 
+  	tokenize(\@$lines, \%sync_table, \%sync_elements);
+  %tokens = %$tokens_p;
+  %seen = %$seen_p;
+
+  # Check validation results.  Check semantics if structure is OK.
+  if ($response_key eq "200") {
+
+    # Semantic checks.  Must have an entity name.
+    if (!($seen{"entityname"})) {
+      $response_key = "508";
+    }
+
+    # Must also have a domain name and sync date.
+    elsif (!$seen{"domainname"} || !$seen{"date"}) {
+      $response_key = "504";
+    }
+
+    # Check for inputs to cause forced error conditions.
+    if ($seen{"domainname"}) {
+      if ($tokens{"domainname"} eq lc($cfg->{"DomainError1"})) {
+        $response_key = "211";
+      }
+    }
+  }
+
+  # Results.  Optionally create a weighted random response.
+  if ($response_key eq "200") {
+    $response_key = rand_response(%response_hash);
+  }
+
+  $response = $response_key . $response_codes{$response_key};
+
+  if ($response_key eq "200") {
+    my $exp_date = my $period = "";
+
+    $period = $cfg->{"DefaultAddPeriod"};
+    $exp_date = new_expiration_date($tokens{"date"});
+
+    # Finish building the adjusted response.
+    $response .= $crlf . $attr_status1 . $crlf . $attr_exp_date . $exp_date;
+  }
+
+  return ($status, $response);
+}
+
 
 # =========================================================================
 #
@@ -1452,6 +1601,49 @@ sub validate_entity {
   }
 
   # Return results.
+  return $response_key;
+}
+
+# =========================================================================
+#
+# This procedure validates a domain sync date.
+#
+# =========================================================================
+sub validate_syncDate {
+  my ($syncDate) = @_;
+
+  my @elem = ();
+  my $response_key = "200";
+  my $month = "";
+  my $day = "";
+
+  # Separate the month and day.
+  if ($syncDate =~ /\-/) {
+    @elem = split(/\-/, $syncDate);
+    $month = $elem[0];
+    $day = $elem[1];
+  }
+  else {
+    $response_key = "541";
+  }
+
+  if ($month < 1 || $month > 12 || $day < 1) { 
+    $response_key = "541";
+  }
+  elsif ($month == 2) {
+    if ($day > 28) {
+       $response_key = "541";
+    }
+  }
+  elsif ($month == 2 || $month == 4 || $month == 6 || $month == 9 || $month == 11) {
+    if ($day > 30) {
+       $response_key = "541";
+    }
+  }
+  elsif ($day > 31) {
+       $response_key = "541";
+  }
+
   return $response_key;
 }
 
@@ -1887,6 +2079,39 @@ sub tokenize {
 sub get_response {
   my ($response_key) = @_;
   return $response_key . $response_codes{$response_key};
+}
+
+# =========================================================================
+# This procedure builds an expiration date string based on the current date
+# and a provided month and day of the year.
+# =========================================================================
+sub new_expiration_date {
+  my ($sync_date) = @_;
+
+  my $exp_date = "";
+  my @elem = ();
+  my $sync_month = "";
+  my $sync_day = "";
+  my $year = 0;
+
+  # Separate the month and day.
+  if ($sync_date =~ /\-/) {
+    @elem = split(/\-/, $sync_date);
+    $sync_month = $elem[0];
+    $sync_day = $elem[1];
+  }
+
+  # Account for leap years.  Start by getting the current date.  We need this
+  # to determine where we are in the current year and how many leap years are
+  # ahead of us.
+  ($year) = (localtime)[5];
+  $year += 1901;
+
+  $exp_date = $year . "-" . $sync_month . "-" . $sync_day . " "
+   . 23 . ":" . 59 . ":" . 59 . ".0";
+
+  # Finished!
+  return $exp_date;
 }
 
 # Last line.

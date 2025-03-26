@@ -12,6 +12,33 @@ mailto:info@verisign-grs.com
 Release Notes History
 ---------------------
 
+December 2002
+
+This release includes the upgrade of the RRP Stub Server and RRP C and Java 
+APIs to the RRP Specification 2.1.0. This release also includes minor fixed 
+to the stub server.
+
+This distribution contains the following files:
+1. relnotes.txt (this file)
+2. install.txt
+3. readme.txt
+4. lgpl-license.txt
+5. Documentation directory: Javadoc for the Java RRP API, C API document, 
+and Enabling SSL documentation
+6. API directory: contains the C and the Java RRP APIs, including the source
+code.
+
+The following changes have been implemented in the RRP Stub Server and the APIs
+
+1. SYNC Command - A new operation has been introduced in the RRP Specification
+2.1.0 which can be used to extend the registration expiration date of a
+domain name to a specific date.
+
+2. RESTORE Command - This is a new operation introducted in the RRP
+Specification 2.1.0 in regards to the REDEMPTION GRACE PERIOD implementation.
+This allows a domain to be restored from a deleted status.
+
+---------------------
 July 18, 2000
 
 This release inlcudes minor fixes to the RRP C and Java APIs. 
